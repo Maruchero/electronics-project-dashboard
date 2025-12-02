@@ -39,3 +39,28 @@ roll  = alpha * roll  + (1 - alpha) * acc_roll
 ## Future Options (Advanced)
 *   **Madgwick Filter**: Better for 6-axis, handles gimbal lock better, computationally efficient.
 *   **Kalman Filter**: The "gold standard," but computationally heavy and harder to tune.
+
+---
+
+## Why No Double Integration for Angles?
+
+The common misconception is that all accelerations (linear or angular) require double integration to find position or angle. This is true for **linear position** from linear acceleration. However, for **angles** derived from IMU sensors, the approach differs:
+
+### 1. Gyroscope Outputs Angular Velocity, Not Acceleration
+*   The gyroscope directly measures **angular velocity** (how fast it's rotating, e.g., in degrees/second or radians/second).
+*   To get the current angle from angular velocity, you only need to perform a **single integration** over time: `Angle = Angle_Previous + (Angular_Velocity * Delta_Time)`.
+*   If the gyroscope measured angular acceleration, then double integration would be required. But it doesn't.
+
+### 2. Accelerometer Uses Gravity as an Absolute Reference for Pitch/Roll
+*   For **Pitch and Roll**, the accelerometer is used to determine the direction of the **gravity vector**. Since gravity always points "down", we can use basic trigonometry (`atan2`) to calculate the tilt angles relative to this fixed reference.
+*   This calculation provides an **absolute angle** that does not drift over time (unlike integrating a gyroscope). No integration is involved here; it's a direct calculation based on the current accelerometer readings.
+*   The accelerometer does not measure angular acceleration. It measures linear acceleration, including the acceleration due to gravity.
+
+### Summary of Angle Calculation for 6-Axis IMU
+
+| Value                   | Sensor     | What it measures       | How to get Angle       | Integration |
+| :---------------------- | :--------- | :--------------------- | :--------------------- | :---------- |
+| **Pitch & Roll Angles** | Accelerometer | Gravity Vector (Static) | `atan2` (Trigonometry) | None        |
+| **Yaw Angle**           | Gyroscope  | Angular Velocity (Rate) | Single Integration     | Single      |
+
+This combined approach (using accelerometer for absolute Pitch/Roll, and gyroscope for relative Yaw) is the foundation of sensor fusion techniques like the Complementary Filter, providing stable and drift-free pitch and roll estimates, and a smooth (but drifting) yaw estimate.
