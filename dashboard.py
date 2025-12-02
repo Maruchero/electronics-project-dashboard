@@ -40,12 +40,37 @@ class Dashboard(QMainWindow):
 
         # --- LEFT PANEL CONTENT ---
         
-        # 3D View (Empty for now)
+        # 3D View
         self.w_3d = gl.GLViewWidget()
         self.w_3d.setCameraPosition(distance=20)
-        # Add a grid just so it's not pitch black and we know it's working
+        
+        # Add a grid
         grid = gl.GLGridItem()
+        grid.setSize(x=20, y=20, z=20)
+        grid.setSpacing(x=1, y=1, z=1)
         self.w_3d.addItem(grid)
+        
+        # OPTION 2: Coordinate Axes (using GLLinePlotItem for custom thickness)
+        line_thickness = 3 # Adjust as needed
+        axis_length = 5    # Same length as before
+
+        self.axes_items = []
+
+        # X-axis (Red)
+        self.x_axis = gl.GLLinePlotItem(pos=np.array([[0,0,0], [axis_length,0,0]]), color=(1,0,0,1), width=line_thickness)
+        self.w_3d.addItem(self.x_axis)
+        self.axes_items.append(self.x_axis)
+
+        # Y-axis (Green)
+        self.y_axis = gl.GLLinePlotItem(pos=np.array([[0,0,0], [0,axis_length,0]]), color=(0,1,0,1), width=line_thickness)
+        self.w_3d.addItem(self.y_axis)
+        self.axes_items.append(self.y_axis)
+
+        # Z-axis (Blue)
+        self.z_axis = gl.GLLinePlotItem(pos=np.array([[0,0,0], [0,0,axis_length]]), color=(0,0,1,1), width=line_thickness)
+        self.w_3d.addItem(self.z_axis)
+        self.axes_items.append(self.z_axis)
+        
         self.d_3d.addWidget(self.w_3d)
 
         # Controls (Empty for now)
@@ -174,6 +199,32 @@ class Dashboard(QMainWindow):
         for i, curve in enumerate(self.curves):
             data_index = mapping[i]
             curve.setData(self.data_buffer[data_index])
+
+        # --- UPDATE 3D ORIENTATION ---
+        # For visualization without the full filter:
+        # We will map Acc data to angles directly (simplified).
+        
+        # Data Indices: 0=AccX, 1=AccY, 2=AccZ
+        ax = new_data[0]
+        ay = new_data[1]
+        
+        # Simple Tilt calculation (clamped to avoid math errors if values get huge)
+        # In real life, use atan2. Here, just mapping raw value to degrees for visual effect.
+        pitch = ax * 10  # Scale factor
+        roll  = ay * 10
+        
+        # For Yaw, let's spin it if in simulation, or use Gyro Z if real
+        if SIMULATION_MODE:
+            yaw = (self.sim_t * 50) % 360
+        else:
+            # Just a placeholder integration for yaw
+            yaw = (self.sim_t * 10) % 360 
+
+        for axis_item in self.axes_items:
+            axis_item.resetTransform()
+            axis_item.rotate(yaw,   0, 0, 1) # Rotate around Z
+            axis_item.rotate(pitch, 0, 1, 0) # Rotate around Y
+            axis_item.rotate(roll,  1, 0, 0) # Rotate around X
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
