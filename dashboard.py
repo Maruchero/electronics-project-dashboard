@@ -5,9 +5,9 @@ import pyqtgraph.opengl as gl
 from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore import QTimer, Qt
-import serial
-import math # Added for atan2, degrees, pi
-import time # Added for time.time()
+from sensor_manager import SensorManager # Refactored data source
+import math 
+import time
 
 # --- CONFIGURATION ---
 SIMULATION_MODE = True  # Set to False to use real Serial
@@ -130,14 +130,8 @@ class Dashboard(QMainWindow):
         self.data_buffer = np.zeros((6, self.history_length))
 
         # --- DATA STREAM SETUP ---
-        if not SIMULATION_MODE:
-            try:
-                self.ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
-                print(f"Connected to {SERIAL_PORT}")
-            except Exception as e:
-                print(f"Serial Error: {e}")
-                print("Switching to SIMULATION_MODE")
-                SIMULATION_MODE = True
+        # Initialize Sensor Manager using global config
+        self.sensor_manager = SensorManager(SERIAL_PORT, BAUD_RATE, SIMULATION_MODE)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
@@ -146,43 +140,24 @@ class Dashboard(QMainWindow):
         self.sim_t = 0
 
     def update(self):
-        new_data = np.zeros(6)
-        px, py, pz = 0, 0, 0 # Initialize position variables
+        # --- 1. GET NEW SENSOR DATA ---
+        new_data = self.sensor_manager.get_next_sample()
+        
+        if new_data is None:
+            return # No data available
 
-        if SIMULATION_MODE:
-            self.sim_t += 0.1
-            # Simulate Acc (X, Y, Z) - sinusoidal
-            new_data[0] = np.sin(self.sim_t) * 9.81  # Acc X (simulating +/- 1g)
-            new_data[1] = np.cos(self.sim_t) * 9.81  # Acc Y
-            new_data[2] = -9.81 + np.sin(self.sim_t * 0.5) * 2  # Acc Z (gravity -9.81)
-            
-            # Simulate Gyro (X, Y, Z) - noisy, in deg/s
-            new_data[3] = np.random.normal(0, 5) # Gyro X
-            new_data[4] = np.random.normal(0, 5) # Gyro Y
-            new_data[5] = 20 + np.random.normal(0, 2) # Gyro Z (constant rotation + noise)
-            
-            # Simulate Movement in Space (Figure-8 pattern)
-            px = np.sin(self.sim_t * 0.5) * 10
-            py = np.cos(self.sim_t * 0.5) * 10
-            pz = np.sin(self.sim_t) * 2
-            
-        else:
-            if self.ser.in_waiting:
-                try:
-                    # Expecting CSV: "ax,ay,az,gx,gy,gz\n"
-                    line = self.ser.readline().decode().strip()
-                    parts = line.split(',')
-                    if len(parts) == 6:
-                        new_data = np.array([float(x) for x in parts])
-                    else:
-                        # Malformed line
-                        return 
-                except Exception as e:
-                    print(f"Parse Error: {e}")
-                    return
-            else:
-                return # No new data
+        # Initialize local position variables for this frame
+        px, py, pz = 0, 0, 0
 
+        # If in simulation, generate the "Figure-8" path for demo visuals
+        if self.sensor_manager.simulation_mode:
+            # Access sim_t from the manager to stay in sync
+            t = self.sensor_manager.sim_t
+            px = np.sin(t * 0.5) * 10
+            py = np.cos(t * 0.5) * 10
+            pz = np.sin(t) * 2
+
+        # --- 2. UPDATE 2D PLOTS ---
         # Update Buffers
         # Roll buffer back
         self.data_buffer = np.roll(self.data_buffer, -1, axis=1)
@@ -190,27 +165,8 @@ class Dashboard(QMainWindow):
         self.data_buffer[:, -1] = new_data
 
         # Update Curves
-        # We stored curves in a flattened list: 
-        # [AccX, GyroX, AccY, GyroY, AccZ, GyroZ] due to the loop order?
-        # Wait, loop was:
-        # for row:
-        #   for col:
-        #     append
-        # So list is: [Row0Col0, Row0Col1, Row1Col0, Row1Col1, Row2Col0, Row2Col1]
-        # Which corresponds to: [AccX, GyroX, AccY, GyroY, AccZ, GyroZ]
-        
-        # Our data buffer is 0..5. 
-        # Let's map them correctly:
-        # Buffer Indices: 0=AccX, 1=AccY, 2=AccZ, 3=GyroX, 4=GyroY, 5=GyroZ
-        
-        # Curve List Indices:
-        # 0: AccX (Row0, Col0) -> Data 0
-        # 1: GyroX (Row0, Col1) -> Data 3
-        # 2: AccY (Row1, Col0) -> Data 1
-        # 3: GyroY (Row1, Col1) -> Data 4
-        # 4: AccZ (Row2, Col0) -> Data 2
-        # 5: GyroZ (Row2, Col1) -> Data 5
-        
+        # Map: 0=AccX, 1=AccY, 2=AccZ, 3=GyroX, 4=GyroY, 5=GyroZ
+        # Curve order: AccX, GyroX, AccY, GyroY, AccZ, GyroZ
         mapping = [0, 3, 1, 4, 2, 5]
         
         for i, curve in enumerate(self.curves):
@@ -290,23 +246,9 @@ class Dashboard(QMainWindow):
         self.pz += self.vz * dt
         
         # If in simulation mode, we OVERRIDE this physics position with the figure-8 for demo purposes
-        # unless we want to test the physics engine with simulated data (which is static/boring).
-        # Let's use the calculated px, py, pz for REAL mode, but keep the override for SIM mode
-        # if desired. 
-        
-        # Logic: If px, py, pz were set by SIMULATION block (Figure-8), use them.
-        # But wait, we initialized them to 0 at the top.
-        # Let's check: 
-        if SIMULATION_MODE:
-            # Re-apply the figure-8 logic if we want the "demo" look, 
-            # OR comment this out to test the double-integration on simulated data (which will drift).
-            # Given the user wants "Double Integration", let's use the PHYSICS calculated values 
-            # BUT the simulated input (sine wave) doesn't have linear acceleration, only gravity rotation.
-            # So the physics engine will result in 0 movement.
-            # To keep the visual interesting, let's revert to the Figure-8 for SIMULATION.
-            px = np.sin(self.sim_t * 0.5) * 10
-            py = np.cos(self.sim_t * 0.5) * 10
-            pz = np.sin(self.sim_t) * 2
+        if self.sensor_manager.simulation_mode:
+            # px, py, pz are already set at the top of update()
+            pass
         else:
             # Real Mode: Use the Physics Integrated values
             px, py, pz = self.px, self.py, self.pz
