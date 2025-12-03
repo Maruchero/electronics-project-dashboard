@@ -46,13 +46,24 @@ class SensorManager:
         else:
             if self.ser and self.ser.in_waiting:
                 try:
-                    # Expecting CSV: "ax,ay,az,gx,gy,gz\n"
+                    # Expecting format: "$ax ay az gx gy gz;"
                     line = self.ser.readline().decode().strip()
-                    parts = line.split(',')
+                    
+                    # Remove start and end delimiters
+                    if line.startswith('$') and line.endswith(';'):
+                        line = line[1:-1] # Strip '$' and ';'
+                    else:
+                        # Malformed start/end, skip
+                        print("Malformed start/end", line)
+                        return None 
+                        
+                    parts = line.split(' ') # Split by space
+                    
                     if len(parts) == 6:
                         return np.array([float(x) for x in parts])
                     else:
-                        # Malformed line
+                        # Malformed line (wrong number of parts)
+                        print("Malformed line parts", line)
                         return None
                 except Exception as e:
                     print(f"Serial Parse Error: {e}")
