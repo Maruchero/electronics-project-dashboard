@@ -6,6 +6,7 @@ from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore import QTimer, Qt
 from sensor_manager import SensorManager # Refactored data source
+from views.acc_gyro_view import AccGyroView # New view for 2D plots
 import math 
 import time
 
@@ -15,7 +16,7 @@ SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 115200
 ENABLE_POSITION_DAMPING = False # Set to True to prevent position drift (resets velocity)
 ACCELERATION_DEADZONE = 50 # Set a threshold for linear acceleration to reduce drift. 0.0 to disable.
-G = 1000  # Gravity constant in mm/s²
+G = 9.81  # Gravity constant in mm/s²
 # ---------------------
 
 class Dashboard(QMainWindow):
@@ -95,41 +96,12 @@ class Dashboard(QMainWindow):
         self.d_controls.addWidget(self.w_controls)
 
         # --- RIGHT PANEL CONTENT (6 CHARTS) ---
-        self.w_charts = pg.GraphicsLayoutWidget()
-        self.d_charts.addWidget(self.w_charts)
-
-        # Create 6 plots in a 2-column x 3-row grid
-        # Col 1: Accelerometer, Col 2: Gyroscope
-        self.plots = []
-        self.curves = []
-        
-        # Titles
-        titles = [
-            ("Acc X", "Acc Y", "Acc Z"),
-            ("Gyro X", "Gyro Y", "Gyro Z")
-        ]
-        
-        # We want:
-        # Acc X | Gyro X
-        # Acc Y | Gyro Y
-        # Acc Z | Gyro Z
-        
-        for row in range(3):
-            row_plots = []
-            for col in range(2):
-                title = titles[col][row]
-                # Add plot to layout
-                p = self.w_charts.addPlot(row=row, col=col, title=title)
-                p.showGrid(x=True, y=True)
-                # Create a curve
-                c = p.plot(pen=(col+1, 3)) # Different color for Acc vs Gyro
-                
-                self.plots.append(p)
-                self.curves.append(c)
+        self.acc_gyro_view = AccGyroView(self)
+        self.d_charts.addWidget(self.acc_gyro_view)
             
-        # Data buffers for 6 channels
-        self.history_length = 200
-        self.data_buffer = np.zeros((6, self.history_length))
+        # Data buffers for 6 channels - MOVED TO ACCGYROVIEW
+        # self.history_length = 200
+        # self.data_buffer = np.zeros((6, self.history_length))
 
         # --- DATA STREAM SETUP ---
         # Initialize Sensor Manager using global config
@@ -139,7 +111,7 @@ class Dashboard(QMainWindow):
         self.timer.timeout.connect(self.update)
         self.timer.start(20) # 50 Hz update rate
         
-        self.sim_t = 0
+        self.sim_t = 0 # Now managed by SensorManager
 
     def update(self):
         # --- 1. GET NEW SENSOR DATA ---
@@ -154,24 +126,12 @@ class Dashboard(QMainWindow):
         plot_data = new_data[:6]
 
         # --- 2. UPDATE 2D PLOTS ---
-        # Update Buffers
-        # Roll buffer back
-        self.data_buffer = np.roll(self.data_buffer, -1, axis=1)
-        # Insert new data at the end
-        self.data_buffer[:, -1] = plot_data
-
-        # Update Curves
-        # Map: 0=AccX, 1=AccY, 2=AccZ, 3=GyroX, 4=GyroY, 5=GyroZ
-        # Curve order: AccX, GyroX, AccY, GyroY, AccZ, GyroZ
-        mapping = [0, 3, 1, 4, 2, 5]
-        
-        for i, curve in enumerate(self.curves):
-            data_index = mapping[i]
-            curve.setData(self.data_buffer[data_index])
+        # Delegate to AccGyroView
+        self.acc_gyro_view.update_view(new_data[:6])
 
         # --- 3. CALCULATE ORIENTATION (Pitch, Roll, Yaw) ---
-        ax, ay, az = plot_data[0], plot_data[1], plot_data[2]
-        gx, gy, gz = plot_data[3], plot_data[4], plot_data[5]
+        ax, ay, az = new_data[0], new_data[1], new_data[2]
+        gx, gy, gz = new_data[3], new_data[4], new_data[5]
 
         # Calculate dt for integration
         current_time = time.time()
