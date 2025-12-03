@@ -10,7 +10,7 @@ import math
 import time
 
 # --- CONFIGURATION ---
-SIMULATION_MODE = False  # Set to False to use real Serial
+SIMULATION_MODE = True  # Set to False to use real Serial
 SERIAL_PORT = '/dev/ttyACM0' 
 BAUD_RATE = 115200
 ENABLE_POSITION_DAMPING = False # Set to True to prevent position drift (resets velocity)
@@ -147,13 +147,18 @@ class Dashboard(QMainWindow):
         
         if new_data is None:
             return # No data available
+            
+        # Handle 9-axis data (Acc, Gyro, Mag)
+        # We currently only use the first 6 for plots and physics (Acc, Gyro)
+        # Mag data (indices 6,7,8) is available for future Compass Mode
+        plot_data = new_data[:6]
 
         # --- 2. UPDATE 2D PLOTS ---
         # Update Buffers
         # Roll buffer back
         self.data_buffer = np.roll(self.data_buffer, -1, axis=1)
         # Insert new data at the end
-        self.data_buffer[:, -1] = new_data
+        self.data_buffer[:, -1] = plot_data
 
         # Update Curves
         # Map: 0=AccX, 1=AccY, 2=AccZ, 3=GyroX, 4=GyroY, 5=GyroZ
@@ -165,8 +170,8 @@ class Dashboard(QMainWindow):
             curve.setData(self.data_buffer[data_index])
 
         # --- 3. CALCULATE ORIENTATION (Pitch, Roll, Yaw) ---
-        ax, ay, az = new_data[0], new_data[1], new_data[2]
-        gx, gy, gz = new_data[3], new_data[4], new_data[5]
+        ax, ay, az = plot_data[0], plot_data[1], plot_data[2]
+        gx, gy, gz = plot_data[3], plot_data[4], plot_data[5]
 
         # Calculate dt for integration
         current_time = time.time()
