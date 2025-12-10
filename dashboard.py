@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from pyqtgraph.dockarea import DockArea, Dock
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import QTimer, Qt
 from sensor_manager import SensorManager # Refactored data source
 from sensor_fusion import SensorFusion # Refactored math engine
@@ -99,11 +99,16 @@ class Dashboard(QMainWindow):
         self.w_controls = QWidget()
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Controls"))
+        
+        self.btn_reset_orient = QPushButton("Reset Orientation")
+        self.btn_reset_orient.clicked.connect(self.reset_orientation)
+        layout.addWidget(self.btn_reset_orient)
+        
         layout.addStretch()
         self.w_controls.setLayout(layout)
         self.d_controls.addWidget(self.w_controls)
 
-        # --- RIGHT PANEL CONTENT (VIEW WIDGETS) ---
+        # --- RIGHT PANEL CONTENT (DOCKS) ---
         # View 1: Acc/Gyro
         self.acc_gyro_view = AccGyroView(self)
         self.d_acc_gyro.addWidget(self.acc_gyro_view)
@@ -121,6 +126,9 @@ class Dashboard(QMainWindow):
         self.timer.start(20) # 50 Hz update rate
         
         self.sim_t = 0
+
+    def reset_orientation(self):
+        self.sensor_fusion.reset()
 
     def update(self):
         # --- 1. GET NEW SENSOR DATA ---

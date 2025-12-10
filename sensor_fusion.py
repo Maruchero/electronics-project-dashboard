@@ -102,3 +102,13 @@ class SensorFusion:
         self.pz += self.vz * dt
         
         return self.pitch, self.roll, self.yaw, self.px, self.py, self.pz
+
+    def reset(self):
+        """
+        Reset all state variables (orientation, position, velocity) to zero.
+        """
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0
+        self.px, self.py, self.pz = 0.0, 0.0, 0.0
+        self.vx, self.vy, self.vz = 0.0, 0.0, 0.0
