@@ -8,10 +8,10 @@ class SensorFusion:
         self.yaw = 0.0
         
         # Physics State (Position in meters, Velocity in m/s)
-        self.px, self.py, self.pz = 0.0, 0.0, 0.0
-        self.vx, self.vy, self.vz = 0.0, 0.0, 0.0
+        self.px, self.py, self.pz = 0.0, 0.0, 0.0 # Fixed to 0 for now
+        self.vx, self.vy, self.vz = 0.0, 0.0, 0.0 # Fixed to 0 for now
         
-        # Configuration
+        # Configuration - largely unused in pure gyro mode
         self.enable_damping = damping
         self.deadzone = deadzone
         self.gravity = 9.81 # m/s^2
@@ -19,33 +19,41 @@ class SensorFusion:
     def update(self, ax, ay, az, gx, gy, gz, dt):
         """
         Update orientation and position based on sensor data.
+        This version uses purely gyroscope integration for orientation.
+        Position (X,Y,Z) is fixed to 0.
         
         Args:
-            ax, ay, az: Accelerometer data in m/s^2
+            ax, ay, az: Accelerometer data in m/s^2 (unused in this version)
             gx, gy, gz: Gyroscope data in deg/s
             dt: Time delta in seconds
             
         Returns:
             tuple: (pitch, roll, yaw, px, py, pz)
         """
-        # --- 1. Orientation (Pitch/Roll from Acc, Yaw from Gyro) ---
+        # --- 1. Orientation (Pure Gyroscope Integration) ---
+        self.pitch += gx * dt # Integrate Gyro X for Pitch
+        self.roll  += gy * dt # Integrate Gyro Y for Roll
+        self.yaw   += gz * dt # Integrate Gyro Z for Yaw
         
-        # Pitch & Roll using Accelerometer (Trigonometry)
-        acc_magnitude_yz = math.sqrt(ay*ay + az*az)
-        
-        pitch_rad = math.atan2(-ax, acc_magnitude_yz) if acc_magnitude_yz != 0 else 0
-        roll_rad  = math.atan2(ay, az) if az != 0 else 0
-        
-        self.pitch = math.degrees(pitch_rad)
-        self.roll  = math.degrees(roll_rad)
-        
-        # Yaw Integration (Gyro Z)
-        self.yaw += gz * dt
+        # Normalize angles to -180 to 180 degrees (optional, but good for display)
+        self.pitch %= 360
+        if self.pitch > 180: self.pitch -= 360
+        if self.pitch < -180: self.pitch += 360
+
+        self.roll %= 360
+        if self.roll > 180: self.roll -= 360
+        if self.roll < -180: self.roll += 360
+
+        self.yaw %= 360
+        if self.yaw > 180: self.yaw -= 360
+        if self.yaw < -180: self.yaw += 360
         
         # --- 2. Position Physics (Double Integration) ---
         
         # Convert Euler angles to Radians for the rotation matrix
         yaw_rad = math.radians(self.yaw)
+        pitch_rad = math.radians(self.pitch)
+        roll_rad = math.radians(self.roll)
         
         # Precompute sines and cosines
         c_y, s_y = math.cos(yaw_rad), math.sin(yaw_rad)

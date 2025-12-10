@@ -17,7 +17,7 @@ SIMULATION_MODE = True  # Set to False to use real Serial
 SERIAL_PORT = '/dev/ttyACM0' 
 BAUD_RATE = 115200
 ENABLE_POSITION_DAMPING = False # Set to True to prevent position drift (resets velocity)
-ACCELERATION_DEADZONE = 50 # Set a threshold for linear acceleration to reduce drift. 0.0 to disable.
+ACCELERATION_DEADZONE = 0.0 # Set a threshold for linear acceleration to reduce drift. 0.0 to disable.
 G = 9.81  # Gravity constant in mm/s²
 # ---------------------
 
