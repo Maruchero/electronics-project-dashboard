@@ -6,6 +6,7 @@ from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore import QTimer, Qt
 from sensor_manager import SensorManager # Refactored data source
+from sensor_fusion import SensorFusion # Refactored math engine
 from views.acc_gyro_view import AccGyroView # New view for 2D plots
 from views.magnetometer_view import MagnetometerView # New view for Mag
 import math 
@@ -27,14 +28,10 @@ class Dashboard(QMainWindow):
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
 
-        # Initialize sensor fusion variables
-        self.current_yaw = 0.0
+        # Initialize sensor fusion engine
+        self.sensor_fusion = SensorFusion(damping=ENABLE_POSITION_DAMPING, deadzone=ACCELERATION_DEADZONE)
         self.last_update_time = time.time()
         
-        # Physics State (Velocity and Position)
-        self.vx, self.vy, self.vz = 0.0, 0.0, 0.0
-        self.px, self.py, self.pz = 0.0, 0.0, 0.0
-
         # 1. Setup DockArea
         self.area = DockArea()
         self.setCentralWidget(self.area)
@@ -144,80 +141,25 @@ class Dashboard(QMainWindow):
         if len(new_data) >= 9:
             self.magnetometer_view.update_view(new_data[6:9])
 
-        # --- 3. CALCULATE ORIENTATION (Pitch, Roll, Yaw) ---
+        # --- 3. CALCULATE ORIENTATION & PHYSICS ---
         ax, ay, az = new_data[0], new_data[1], new_data[2]
         gx, gy, gz = new_data[3], new_data[4], new_data[5]
 
-        # Calculate dt for integration
+        # Calculate dt
         current_time = time.time()
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
 
-        # --- Pitch & Roll (Accelerometer) ---
-        # Calculate magnitude of acceleration in YZ plane
-        acc_magnitude_yz = math.sqrt(ay*ay + az*az)
+        # Update Physics Engine
+        pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
         
-        pitch_rad = math.atan2(-ax, acc_magnitude_yz) if acc_magnitude_yz != 0 else 0
-        roll_rad  = math.atan2(ay, az) if az != 0 else 0
-        
-        pitch = math.degrees(pitch_rad)
-        roll  = math.degrees(roll_rad)
-
-        # --- Yaw (Gyro Integration) ---
-        self.current_yaw += gz * dt
-        yaw = self.current_yaw
-        yaw_rad = math.radians(yaw)
-
-        # --- 4. POSITION PHYSICS (Double Integration) ---
-        # Rotation Matrix construction (Yaw-Pitch-Roll sequence)
-        
-        # Precompute sines and cosines
-        c_y, s_y = math.cos(yaw_rad), math.sin(yaw_rad)
-        c_p, s_p = math.cos(pitch_rad), math.sin(pitch_rad)
-        c_r, s_r = math.cos(roll_rad), math.sin(roll_rad)
-        
-        # X_World
-        ax_w = (c_y*c_p) * ax + \
-               (c_y*s_p*s_r - s_y*c_r) * ay + \
-               (c_y*s_p*c_r + s_y*s_r) * az
-
-        # Y_World
-        ay_w = (s_y*c_p) * ax + \
-               (s_y*s_p*s_r + c_y*c_r) * ay + \
-               (s_y*s_p*c_r - c_y*s_r) * az
-               
-        # Z_World
-        az_w = (-s_p) * ax + \
-               (c_p*s_r) * ay + \
-               (c_p*c_r) * az
-               
-        # Remove Gravity (assuming World Z is Up, and Gravity is -9.81 relative to that)
-        az_w_linear = az_w - G
-        
-        # Deadzone (Noise Reduction)
-        if abs(ax_w) < ACCELERATION_DEADZONE: ax_w = 0
-        if abs(ay_w) < ACCELERATION_DEADZONE: ay_w = 0
-        if abs(az_w_linear) < ACCELERATION_DEADZONE: az_w_linear = 0
-
-        # Integrate Acceleration -> Velocity
-        self.vx += ax_w * dt
-        self.vy += ay_w * dt
-        self.vz += az_w_linear * dt
-        
-        # Damping/Friction (CRITICAL to stop it flying away infinitely due to noise)
-        if ENABLE_POSITION_DAMPING:
-            damping_factor = 0.95
-            self.vx *= damping_factor
-            self.vy *= damping_factor
-            self.vz *= damping_factor
-        
-        # Integrate Velocity -> Position
-        self.px += self.vx * dt
-        self.py += self.vy * dt
-        self.pz += self.vz * dt
-        
-        # Use the Physics Integrated values for display
-        px, py, pz = self.px, self.py, self.pz
+        # If in simulation mode, we OVERRIDE this physics position with the figure-8 for demo purposes
+        if self.sensor_manager.simulation_mode:
+            # px, py, pz are already set at the top of update()
+            pass
+        else:
+            # Real Mode: Use the Physics Integrated values
+            pass
 
         for axis_item in self.axes_items:
             axis_item.resetTransform()
