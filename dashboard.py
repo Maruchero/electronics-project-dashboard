@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
@@ -9,27 +8,17 @@ from sensor_manager import SensorManager # Refactored data source
 from sensor_fusion import SensorFusion # Refactored math engine
 from views.acc_gyro_view import AccGyroView # New view for 2D plots
 from views.magnetometer_view import MagnetometerView # New view for Mag
-import math 
+from app_constants import AppConstants
 import time
-
-# --- CONFIGURATION ---
-SIMULATION_MODE = False  # Set to False to use real Serial
-SERIAL_PORT = '/dev/ttyACM0' 
-BAUD_RATE = 115200
-ENABLE_POSITION_DAMPING = False # Set to True to prevent position drift (resets velocity)
-ACCELERATION_DEADZONE = 0.0 # Set a threshold for linear acceleration to reduce drift. 0.0 to disable.
-G = 9.81  # Gravity constant in mm/s²
-# ---------------------
 
 class Dashboard(QMainWindow):
     def __init__(self):
-        global SIMULATION_MODE  # DO NOT REMOVE THIS LINE, it's necessary
         super().__init__()
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
 
         # Initialize sensor fusion engine
-        self.sensor_fusion = SensorFusion(damping=ENABLE_POSITION_DAMPING, deadzone=ACCELERATION_DEADZONE)
+        self.sensor_fusion = SensorFusion(damping=AppConstants.ENABLE_POSITION_DAMPING, deadzone=AppConstants.ACCELERATION_DEADZONE)
         self.last_update_time = time.time()
         
         # 1. Setup DockArea
@@ -119,7 +108,7 @@ class Dashboard(QMainWindow):
 
         # --- DATA STREAM SETUP ---
         # Initialize Sensor Manager using global config
-        self.sensor_manager = SensorManager(SERIAL_PORT, BAUD_RATE, SIMULATION_MODE)
+        self.sensor_manager = SensorManager(AppConstants.SERIAL_PORT, AppConstants.BAUD_RATE, AppConstants.SIMULATION_MODE)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
