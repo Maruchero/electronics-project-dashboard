@@ -30,11 +30,12 @@ class DebugStats:
 class Dashboard(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.debug_stats = DebugStats()
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
 
+        self.debug_stats = DebugStats()
         self.sensor_fusion = SensorFusion(damping=AppConstants.ENABLE_POSITION_DAMPING, deadzone=AppConstants.ACCELERATION_DEADZONE)
+        self.sensor_manager = SensorManager(AppConstants.SERIAL_PORT, AppConstants.BAUD_RATE, AppConstants.SIMULATION_MODE)
         self.last_update_time = time.time()
 
         self.area = DockArea()
@@ -95,8 +96,6 @@ class Dashboard(QMainWindow):
         self.magnetometer_view = MagnetometerView(self)
         self.d_magnetometer.addWidget(self.magnetometer_view)
 
-        self.sensor_manager = SensorManager(AppConstants.SERIAL_PORT, AppConstants.BAUD_RATE, AppConstants.SIMULATION_MODE)
-
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(AppConstants.UPDATE_INTERVAL_MS)
@@ -107,9 +106,13 @@ class Dashboard(QMainWindow):
         self.sensor_fusion.reset()
 
     def update_debug_stats(self):
+        self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
+            self.sensor_manager.misses
+        )
+        self.debug_stats.update_frequency = 1000.0 / AppConstants.UPDATE_INTERVAL_MS
         self.debug_stats_label.setText(str(self.debug_stats))
 
-    def update(self):
+    def update(self) -> None:
         new_data = self.sensor_manager.get_next_sample()
 
         if new_data is None:
@@ -136,10 +139,6 @@ class Dashboard(QMainWindow):
             axis_item.rotate(pitch, 0, 1, 0)
             axis_item.rotate(roll,  1, 0, 0)
 
-        self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
-            self.sensor_manager.misses
-        )
-        self.debug_stats.update_frequency = 1000.0 / AppConstants.UPDATE_INTERVAL_MS
         self.update_debug_stats()
 
 if __name__ == '__main__':
