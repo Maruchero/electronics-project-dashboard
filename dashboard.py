@@ -10,16 +10,33 @@ from views.acc_gyro_view import AccGyroView
 from views.magnetometer_view import MagnetometerView
 from app_constants import AppConstants
 import time
+from dataclasses import dataclass
+
+
+@dataclass
+class DebugStats:
+    miss_rate: float = 0.0
+    update_frequency: float = 0.0
+
+    def __repr__(self):
+        return "\n".join(
+            [
+                f"{name.replace('_', ' ').title()}: {value:.2f}"
+                for name, value in self.__dict__.items()
+            ]
+        )
+
 
 class Dashboard(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.debug_stats = DebugStats()
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
 
         self.sensor_fusion = SensorFusion(damping=AppConstants.ENABLE_POSITION_DAMPING, deadzone=AppConstants.ACCELERATION_DEADZONE)
         self.last_update_time = time.time()
-        
+
         self.area = DockArea()
         self.setCentralWidget(self.area)
 
@@ -27,7 +44,7 @@ class Dashboard(QMainWindow):
         self.d_controls = Dock("Controls", size=(400, 200))
         self.d_acc_gyro = Dock("Acc & Gyro", size=(800, 600))
         self.d_magnetometer = Dock("Magnetometer", size=(800, 600))
-        
+
         self.area.addDock(self.d_acc_gyro, 'right') 
         self.area.addDock(self.d_magnetometer, 'above', self.d_acc_gyro)
         self.area.addDock(self.d_3d, 'left', self.d_acc_gyro) 
@@ -35,12 +52,12 @@ class Dashboard(QMainWindow):
 
         self.w_3d = gl.GLViewWidget()
         self.w_3d.setCameraPosition(distance=20)
-        
+
         grid = gl.GLGridItem()
         grid.setSize(x=20, y=20, z=20)
         grid.setSpacing(x=1, y=1, z=1)
         self.w_3d.addItem(grid)
-        
+
         line_thickness = 3
         axis_length = 1
 
@@ -57,24 +74,24 @@ class Dashboard(QMainWindow):
         self.z_axis = gl.GLLinePlotItem(pos=np.array([[0,0,0], [0,0,axis_length]]), color=(0,0,1,1), width=line_thickness)
         self.w_3d.addItem(self.z_axis)
         self.axes_items.append(self.z_axis)
-        
+
         self.d_3d.addWidget(self.w_3d)
 
         self.w_controls = QWidget()
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Controls"))
-        
         self.btn_reset_orient = QPushButton("Reset Orientation")
         self.btn_reset_orient.clicked.connect(self.reset_orientation)
         layout.addWidget(self.btn_reset_orient)
-        
+        self.debug_stats_label = QLabel("*debug stats will appear here*")
+        layout.addWidget(self.debug_stats_label)
         layout.addStretch()
         self.w_controls.setLayout(layout)
         self.d_controls.addWidget(self.w_controls)
 
         self.acc_gyro_view = AccGyroView(self)
         self.d_acc_gyro.addWidget(self.acc_gyro_view)
-        
+
         self.magnetometer_view = MagnetometerView(self)
         self.d_magnetometer.addWidget(self.magnetometer_view)
 
@@ -82,21 +99,24 @@ class Dashboard(QMainWindow):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
-        self.timer.start(20)
-        
+        self.timer.start(AppConstants.UPDATE_INTERVAL_MS)
+
         self.sim_t = 0
 
     def reset_orientation(self):
         self.sensor_fusion.reset()
 
+    def update_debug_stats(self):
+        self.debug_stats_label.setText(str(self.debug_stats))
+
     def update(self):
         new_data = self.sensor_manager.get_next_sample()
-        
+
         if new_data is None:
             return
-            
+
         self.acc_gyro_view.update_view(new_data[:6])
-        
+
         if len(new_data) >= 9:
             self.magnetometer_view.update_view(new_data[6:9])
 
@@ -108,13 +128,19 @@ class Dashboard(QMainWindow):
         self.last_update_time = current_time
 
         pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
-        
+
         for axis_item in self.axes_items:
             axis_item.resetTransform()
             axis_item.translate(px, py, pz)
             axis_item.rotate(yaw,   0, 0, 1)
             axis_item.rotate(pitch, 0, 1, 0)
             axis_item.rotate(roll,  1, 0, 0)
+
+        self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
+            self.sensor_manager.misses
+        )
+        self.debug_stats.update_frequency = 1000.0 / AppConstants.UPDATE_INTERVAL_MS
+        self.update_debug_stats()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

@@ -7,3 +7,4 @@ class AppConstants:
     ENABLE_POSITION_DAMPING = False # Set to True to prevent position drift (resets velocity)
     ACCELERATION_DEADZONE = 1.5 # Set a threshold for linear acceleration to reduce drift. 0.0 to disable.
     G = 9.81  # Gravity constant in mm/s²
+    UPDATE_INTERVAL_MS = 1  # Update interval in milliseconds (1000 Hz)
