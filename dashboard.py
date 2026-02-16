@@ -3,7 +3,9 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, QMutex, QThread
+from PyQt5.QtGui import QColorConstants as QColors, QColor, QPalette
+from data_processing import DataProcessingWorker
 from sensor_manager import SensorManager
 from sensor_fusion import SensorFusion
 from views.acc_gyro_view import AccGyroView
@@ -11,6 +13,26 @@ from views.magnetometer_view import MagnetometerView
 from app_constants import AppConstants
 import time
 from dataclasses import dataclass
+
+
+class BoardState:
+    def __init__(self):
+        self.x, self.y, self.z = 0.0, 0.0, 0.0
+        self.roll, self.pitch, self.yaw = 0.0, 0.0, 0.0
+        self.mutex = QMutex()
+
+    def update(self, new_coords):
+        print("[DEBUG] Updating BoardState")
+        self.mutex.lock()
+        self.x, self.y, self.z, self.roll, self.pitch, self.yaw = new_coords
+        self.mutex.unlock()
+
+    def get_snapshot(self):
+        print("[DEBUG] Getting BoardState snapshot")
+        self.mutex.lock()
+        snapshot = (self.x, self.y, self.z, self.roll, self.pitch, self.yaw)
+        self.mutex.unlock()
+        return snapshot
 
 
 @dataclass
@@ -32,11 +54,13 @@ class Dashboard(QMainWindow):
         super().__init__()
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
-
+        
+        self.shared_state = BoardState()
+        self.worker_thread = DataProcessingWorker(self.shared_state)
+        self.worker_thread.started.connect(self.worker_thread.run)
+        self.worker_thread.start()
+        
         self.debug_stats = DebugStats()
-        self.sensor_fusion = SensorFusion(damping=AppConstants.ENABLE_POSITION_DAMPING, deadzone=AppConstants.ACCELERATION_DEADZONE)
-        self.sensor_manager = SensorManager(AppConstants.SERIAL_PORT, AppConstants.BAUD_RATE, AppConstants.SIMULATION_MODE)
-        self.last_update_time = time.time()
 
         self.area = DockArea()
         self.setCentralWidget(self.area)
@@ -98,7 +122,7 @@ class Dashboard(QMainWindow):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
-        self.timer.start(AppConstants.UPDATE_INTERVAL_MS)
+        self.timer.start(AppConstants.DASHBOARD_UPDATE_INTERVAL)
 
         self.sim_t = 0
 
@@ -109,28 +133,11 @@ class Dashboard(QMainWindow):
         self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
             self.sensor_manager.misses
         )
-        self.debug_stats.update_frequency = 1000.0 / AppConstants.UPDATE_INTERVAL_MS
+        self.debug_stats.update_frequency = 1000.0 / AppConstants.DASHBOARD_UPDATE_INTERVAL
         self.debug_stats_label.setText(str(self.debug_stats))
 
     def update(self) -> None:
-        new_data = self.sensor_manager.get_next_sample()
-
-        if new_data is None:
-            return
-
-        self.acc_gyro_view.update_view(new_data[:6])
-
-        if len(new_data) >= 9:
-            self.magnetometer_view.update_view(new_data[6:9])
-
-        ax, ay, az = new_data[0], new_data[1], new_data[2]
-        gx, gy, gz = new_data[3], new_data[4], new_data[5]
-
-        current_time = time.time()
-        dt = current_time - self.last_update_time
-        self.last_update_time = current_time
-
-        pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
+        pitch, roll, yaw, px, py, pz = self.shared_state.get_snapshot()
 
         for axis_item in self.axes_items:
             axis_item.resetTransform()
@@ -139,27 +146,32 @@ class Dashboard(QMainWindow):
             axis_item.rotate(pitch, 0, 1, 0)
             axis_item.rotate(roll,  1, 0, 0)
 
-        self.update_debug_stats()
+        # self.update_debug_stats()
+        
+    def closeEvent(self, event):
+        self.worker_thread.running = False
+        self.worker_thread.quit()
+        self.worker_thread.wait()
+        event.accept()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    from PyQt5.QtGui import QPalette, QColor
     palette = QPalette()
     palette.setColor(QPalette.Window, QColor(53, 53, 53))
-    palette.setColor(QPalette.WindowText, Qt.white)
+    palette.setColor(QPalette.WindowText, QColors.White)
     palette.setColor(QPalette.Base, QColor(25, 25, 25))
     palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    palette.setColor(QPalette.ToolTipBase, Qt.white)
-    palette.setColor(QPalette.ToolTipText, Qt.white)
-    palette.setColor(QPalette.Text, Qt.white)
+    palette.setColor(QPalette.ToolTipBase, QColors.White)
+    palette.setColor(QPalette.ToolTipText, QColors.White)
+    palette.setColor(QPalette.Text, QColors.White)
     palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    palette.setColor(QPalette.ButtonText, Qt.white)
-    palette.setColor(QPalette.BrightText, Qt.red)
+    palette.setColor(QPalette.ButtonText, QColors.White)
+    palette.setColor(QPalette.BrightText, QColors.Red)
     palette.setColor(QPalette.Link, QColor(42, 130, 218))
     palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, Qt.black)
+    palette.setColor(QPalette.HighlightedText, QColors.Black)
     app.setPalette(palette)
 
     dash = Dashboard()
