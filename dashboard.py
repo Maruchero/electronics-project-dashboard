@@ -6,12 +6,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLa
 from PyQt5.QtCore import QTimer, QMutex, QThread
 from PyQt5.QtGui import QColorConstants as QColors, QColor, QPalette
 from data_processing import DataProcessingWorker
-from sensor_manager import SensorManager
-from sensor_fusion import SensorFusion
 from views.acc_gyro_view import AccGyroView
 from views.magnetometer_view import MagnetometerView
 from app_constants import AppConstants
-import time
 from dataclasses import dataclass
 
 
@@ -28,7 +25,6 @@ class BoardState:
         self.mutex.unlock()
 
     def get_snapshot(self):
-        print("[DEBUG] Getting BoardState snapshot")
         self.mutex.lock()
         snapshot = (self.x, self.y, self.z, self.roll, self.pitch, self.yaw)
         self.mutex.unlock()
@@ -57,7 +53,7 @@ class Dashboard(QMainWindow):
         
         self.shared_state = BoardState()
         self.worker_thread = DataProcessingWorker(self.shared_state)
-        self.worker_thread.started.connect(self.worker_thread.run)
+        # self.worker_thread.started.connect(self.worker_thread.run)
         self.worker_thread.start()
         
         self.debug_stats = DebugStats()
@@ -124,10 +120,8 @@ class Dashboard(QMainWindow):
         self.timer.timeout.connect(self.update)
         self.timer.start(AppConstants.DASHBOARD_UPDATE_INTERVAL)
 
-        self.sim_t = 0
-
     def reset_orientation(self):
-        self.sensor_fusion.reset()
+        self.worker_thread.reset()
 
     def update_debug_stats(self):
         self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
@@ -137,7 +131,9 @@ class Dashboard(QMainWindow):
         self.debug_stats_label.setText(str(self.debug_stats))
 
     def update(self) -> None:
-        pitch, roll, yaw, px, py, pz = self.shared_state.get_snapshot()
+        snapshot = self.shared_state.get_snapshot()
+        pitch, roll, yaw, px, py, pz = snapshot
+        self.acc_gyro_view.update_view(snapshot)
 
         for axis_item in self.axes_items:
             axis_item.resetTransform()

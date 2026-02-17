@@ -19,24 +19,29 @@ class DataProcessingWorker(QThread):
         try:
             print("[DEBUG] DataProcessingWorker thread started")
             while self.running:
-                new_data = self.sensor_manager.get_next_sample()
-
-                if new_data is None:
-                    return
-
-                ax, ay, az = new_data[0], new_data[1], new_data[2]
-                gx, gy, gz = new_data[3], new_data[4], new_data[5]
-
-                current_time = time.time()
-                dt = current_time - self.last_update_time
-                self.last_update_time = current_time
-
-                pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
-                
-                self.shared_state.update((px, py, pz, roll, pitch, yaw))
+                self.update()
                 time.sleep(AppConstants.PHYSICS_UPDATE_INTERVAL / 1000.0)
 
             self.sensor_manager.ser.close()
             print("[DEBUG] DataProcessingWorker thread exiting")
         except Exception as e:
             print(f"WORKER CRASHED: {e}")
+            
+    def update(self):
+        new_data = self.sensor_manager.get_next_sample()
+
+        if new_data is None:
+            return
+
+        ax, ay, az, gx, gy, gz = new_data[0:6]
+
+        current_time = time.time()
+        dt = current_time - self.last_update_time
+        self.last_update_time = current_time
+
+        pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
+        
+        self.shared_state.update((px, py, pz, roll, pitch, yaw))
+            
+    def reset(self):
+        self.sensor_fusion.reset()
