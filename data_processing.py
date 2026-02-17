@@ -55,7 +55,7 @@ class DataProcessingWorker(QThread):
         super().__init__()
         self.shared_state = shared_state
         self.sensor_manager = SensorManager(AppConstants.SERIAL_PORT, AppConstants.BAUD_RATE, AppConstants.SIMULATION_MODE)
-        self.sensor_fusion = SensorFusion(damping=AppConstants.ENABLE_POSITION_DAMPING, deadzone=AppConstants.ACCELERATION_DEADZONE)
+        self.sensor_fusion = SensorFusion()
         self.last_update_time = time.time()
         self.running = True
         

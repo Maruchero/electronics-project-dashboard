@@ -12,9 +12,7 @@ class AppConstants:
     PHYSICS_UPDATE_INTERVAL = 50  # Physics update interval in milliseconds (100 Hz)
 
     ## Sensor fusion ##
-    ENABLE_POSITION_DAMPING = (
-        False  # Set to True to prevent position drift (resets velocity)
-    )
-    ACCELERATION_DEADZONE = 1.5  # Deadzone for linear acceleration
+    DAMPING_FACTOR = 0.95  # Slows down velocity over time to prevent drift
+    ACCELERATION_DEADZONE = 1.5  # Deadzone for linear accelerations
     ROTATION_DEADZONE = 0.05  # Deadzone for rotation rate
     G = 9.81  # Gravity constant in mm/s²

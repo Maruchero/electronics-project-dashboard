@@ -2,15 +2,13 @@ import math
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+from app_constants import AppConstants
+
 class SensorFusion:
-    def __init__(self, damping=False, deadzone=0.0):
-        self.rpy = np.zeros(3)  # board frame
+    def __init__(self):
+        self.rpy = np.zeros(3)  # world frame
         self.pos = np.zeros(3)  # world frame
         self.vel = np.zeros(3)  # world frame
-        
-        self.enable_damping = damping
-        self.deadzone = deadzone
-        self.gravity = 9.81
 
     def update(self, data: np.ndarray, dt):
         """
@@ -29,19 +27,19 @@ class SensorFusion:
         if len(data) < 6:
             raise ValueError("Data array must contain at least 6 elements: [ax, ay, az, gx, gy, gz]")
         
-        rotation = R.from_euler("XYZ", data[3:6] * dt, degrees=True)
+        rpy = data[3:6] * dt
+        for i in range(3):
+            if abs(rpy[i]) < AppConstants.ROTATION_DEADZONE:
+                rpy[i] = 0.0
+        rotation = R.from_euler("XYZ", rpy, degrees=True)
+        
         acc_world = rotation.apply(data[0:3])
-        acc_world[2] -= self.gravity
+        acc_world[2] -= AppConstants.G
+        for i in range(3):
+            if abs(acc_world[i]) < AppConstants.ACCELERATION_DEADZONE:
+                acc_world[i] = 0.0
         
-        # Apply deadzone to accelerations
-        
-        self.vel = acc_world * dt + self.vel
-        
-        # if self.enable_damping:
-        #     damping_factor = 0.95
-        #     self.vx *= damping_factor
-        #     self.vy *= damping_factor
-        #     self.vz *= damping_factor
+        self.vel = acc_world * dt + self.vel * AppConstants.DAMPING_FACTOR
 
         self.pos = self.vel * dt + self.pos
         
