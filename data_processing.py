@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import time
 from sensor_manager import SensorManager
 from sensor_fusion import SensorFusion
@@ -5,10 +6,25 @@ from app_constants import AppConstants
 from PyQt5.QtCore import QThread, QTimer, QMutex
 
 
+@dataclass
+class DebugStats:
+    miss_rate: float = 0.0
+    update_frequency: float = 0.0
+
+    def __repr__(self):
+        return "\n".join(
+            [
+                f"{name.replace('_', ' ').title()}: {value:.2f}"
+                for name, value in self.__dict__.items()
+            ]
+        )
+
+
 class DataProcessingWorkerState:
     def __init__(self):
         self.x, self.y, self.z = 0.0, 0.0, 0.0
         self.roll, self.pitch, self.yaw = 0.0, 0.0, 0.0
+        self.debug_stats = DebugStats()
         self.mutex = QMutex()
 
     def update(self, new_coords):
@@ -16,11 +32,22 @@ class DataProcessingWorkerState:
         self.x, self.y, self.z, self.roll, self.pitch, self.yaw = new_coords
         self.mutex.unlock()
 
+    def update_stats(self, stats):
+        self.mutex.lock()
+        self.debug_stats = stats
+        self.mutex.unlock()
+
     def get_snapshot(self):
         self.mutex.lock()
         snapshot = (self.x, self.y, self.z, self.roll, self.pitch, self.yaw)
         self.mutex.unlock()
         return snapshot
+
+    def get_stats(self):
+        self.mutex.lock()
+        stats = self.debug_stats
+        self.mutex.unlock()
+        return stats
 
 
 class DataProcessingWorker(QThread):
@@ -36,14 +63,15 @@ class DataProcessingWorker(QThread):
         self.timer.timeout.connect(self.update)
 
     def run(self):
-        print("[DEBUG] DataProcessingWorker thread started")
+        print(f"[DEBUG] {self.__class__.__name__} thread started")
         while self.running:
             self.update()
+            self.update_debug_stats()
             time.sleep(AppConstants.PHYSICS_UPDATE_INTERVAL / 1000.0)
             
         if self.sensor_manager.ser is not None:
             self.sensor_manager.ser.close()
-        print("[DEBUG] DataProcessingWorker thread exiting")
+        print(f"[DEBUG] {self.__class__.__name__} thread exiting")
             
     def update(self):
         try:
@@ -62,6 +90,15 @@ class DataProcessingWorker(QThread):
         except Exception as e:
             print(f"WORKER CRASHED: {e}")
             self.stop()
+            
+    def update_debug_stats(self):
+        stats = DebugStats()
+        if len(self.sensor_manager.misses) > 0:
+            stats.miss_rate = sum(self.sensor_manager.misses) / len(
+                self.sensor_manager.misses
+            )
+        stats.update_frequency = 1.0 / AppConstants.PHYSICS_UPDATE_INTERVAL * 1000.0
+        self.shared_state.update_stats(stats)
             
     def reset(self):
         self.sensor_fusion.reset()

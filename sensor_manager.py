@@ -17,7 +17,7 @@ class SensorManager:
         self.sim_t = 0
         self.buffer = ""
         # miss statistic: it's a queue of 1 second of data, where each miss is represented as a 1 and each hit as a 0. So the sum of the queue gives the number of misses in the last second, and the length of the queue gives the total number of samples in the last second.
-        self.misses = deque(maxlen=1000 // AppConstants.DASHBOARD_UPDATE_INTERVAL)
+        self.misses = deque(maxlen=1000 // AppConstants.PHYSICS_UPDATE_INTERVAL)
 
         if not self.simulation_mode:
             try:

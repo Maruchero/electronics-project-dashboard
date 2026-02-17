@@ -9,21 +9,6 @@ from data_processing import DataProcessingWorker, DataProcessingWorkerState
 from views.acc_gyro_view import AccGyroView
 from views.magnetometer_view import MagnetometerView
 from app_constants import AppConstants
-from dataclasses import dataclass
-
-
-@dataclass
-class DebugStats:
-    miss_rate: float = 0.0
-    update_frequency: float = 0.0
-
-    def __repr__(self):
-        return "\n".join(
-            [
-                f"{name.replace('_', ' ').title()}: {value:.2f}"
-                for name, value in self.__dict__.items()
-            ]
-        )
 
 
 class Dashboard(QMainWindow):
@@ -35,8 +20,6 @@ class Dashboard(QMainWindow):
         self.shared_state = DataProcessingWorkerState()
         self.worker_thread = DataProcessingWorker(self.shared_state)
         self.worker_thread.start()
-        
-        self.debug_stats = DebugStats()
 
         self.area = DockArea()
         self.setCentralWidget(self.area)
@@ -103,13 +86,6 @@ class Dashboard(QMainWindow):
     def reset_orientation(self):
         self.worker_thread.reset()
 
-    def update_debug_stats(self):
-        self.debug_stats.miss_rate = sum(self.sensor_manager.misses) / len(
-            self.sensor_manager.misses
-        )
-        self.debug_stats.update_frequency = 1000.0 / AppConstants.DASHBOARD_UPDATE_INTERVAL
-        self.debug_stats_label.setText(str(self.debug_stats))
-
     def update(self) -> None:
         snapshot = self.shared_state.get_snapshot()
         pitch, roll, yaw, px, py, pz = snapshot
@@ -122,7 +98,8 @@ class Dashboard(QMainWindow):
             axis_item.rotate(pitch, 0, 1, 0)
             axis_item.rotate(roll,  1, 0, 0)
 
-        # self.update_debug_stats()
+        stats = self.shared_state.get_stats()
+        self.debug_stats_label.setText(str(stats))
         
     def closeEvent(self, event):
         self.worker_thread.stop()
