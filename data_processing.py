@@ -79,12 +79,11 @@ class DataProcessingWorker(QThread):
             if new_data is None:
                 return
 
-            ax, ay, az, gx, gy, gz = new_data[0:6]
             current_time = time.time()
             dt = current_time - self.last_update_time
             self.last_update_time = current_time
 
-            pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(ax, ay, az, gx, gy, gz, dt)
+            pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(new_data[0:6], dt)
             
             self.shared_state.update((px, py, pz, roll, pitch, yaw))
         except Exception as e:
