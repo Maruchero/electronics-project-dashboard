@@ -3,32 +3,13 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.dockarea import DockArea, Dock
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import QTimer, QMutex, QThread
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColorConstants as QColors, QColor, QPalette
-from data_processing import DataProcessingWorker
+from data_processing import DataProcessingWorker, DataProcessingWorkerState
 from views.acc_gyro_view import AccGyroView
 from views.magnetometer_view import MagnetometerView
 from app_constants import AppConstants
 from dataclasses import dataclass
-
-
-class BoardState:
-    def __init__(self):
-        self.x, self.y, self.z = 0.0, 0.0, 0.0
-        self.roll, self.pitch, self.yaw = 0.0, 0.0, 0.0
-        self.mutex = QMutex()
-
-    def update(self, new_coords):
-        print("[DEBUG] Updating BoardState")
-        self.mutex.lock()
-        self.x, self.y, self.z, self.roll, self.pitch, self.yaw = new_coords
-        self.mutex.unlock()
-
-    def get_snapshot(self):
-        self.mutex.lock()
-        snapshot = (self.x, self.y, self.z, self.roll, self.pitch, self.yaw)
-        self.mutex.unlock()
-        return snapshot
 
 
 @dataclass
@@ -51,9 +32,8 @@ class Dashboard(QMainWindow):
         self.setWindowTitle("6-Axis Sensor Dashboard")
         self.resize(1200, 800)
         
-        self.shared_state = BoardState()
+        self.shared_state = DataProcessingWorkerState()
         self.worker_thread = DataProcessingWorker(self.shared_state)
-        # self.worker_thread.started.connect(self.worker_thread.run)
         self.worker_thread.start()
         
         self.debug_stats = DebugStats()
@@ -116,7 +96,7 @@ class Dashboard(QMainWindow):
         self.magnetometer_view = MagnetometerView(self)
         self.d_magnetometer.addWidget(self.magnetometer_view)
 
-        self.timer = QTimer()
+        self.timer = QTimer(self)
         self.timer.timeout.connect(self.update)
         self.timer.start(AppConstants.DASHBOARD_UPDATE_INTERVAL)
 
@@ -145,7 +125,7 @@ class Dashboard(QMainWindow):
         # self.update_debug_stats()
         
     def closeEvent(self, event):
-        self.worker_thread.running = False
+        self.worker_thread.stop()
         self.worker_thread.quit()
         self.worker_thread.wait()
         event.accept()
