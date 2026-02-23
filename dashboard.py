@@ -88,8 +88,8 @@ class Dashboard(QMainWindow):
 
     def update(self) -> None:
         snapshot = self.shared_state.get_snapshot()
-        pitch, roll, yaw, px, py, pz = snapshot
-        self.acc_gyro_view.update_view(snapshot)
+        px, py, pz, roll, pitch, yaw = snapshot[6:12]
+        self.acc_gyro_view.update_view(snapshot[0:6])
 
         for axis_item in self.axes_items:
             axis_item.resetTransform()

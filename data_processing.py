@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import time
+
+import numpy as np
 from sensor_manager import SensorManager
 from sensor_fusion import SensorFusion
 from app_constants import AppConstants
@@ -22,14 +24,19 @@ class DebugStats:
 
 class DataProcessingWorkerState:
     def __init__(self):
-        self.x, self.y, self.z = 0.0, 0.0, 0.0
-        self.roll, self.pitch, self.yaw = 0.0, 0.0, 0.0
+        self.linear_acc = np.zeros(3)
+        self.angular_vel = np.zeros(3)
+        self.pos = np.zeros(3)
+        self.rpy = np.zeros(3)
         self.debug_stats = DebugStats()
         self.mutex = QMutex()
 
-    def update(self, new_coords):
+    def update(self, raw_data, pos, rpy):
         self.mutex.lock()
-        self.x, self.y, self.z, self.roll, self.pitch, self.yaw = new_coords
+        self.linear_acc = raw_data[0:3]
+        self.angular_vel = raw_data[3:6]
+        self.pos = pos
+        self.rpy = rpy
         self.mutex.unlock()
 
     def update_stats(self, stats):
@@ -39,7 +46,10 @@ class DataProcessingWorkerState:
 
     def get_snapshot(self):
         self.mutex.lock()
-        snapshot = (self.x, self.y, self.z, self.roll, self.pitch, self.yaw)
+        snapshot = (self.linear_acc[0], self.linear_acc[1], self.linear_acc[2],
+                   self.angular_vel[0], self.angular_vel[1], self.angular_vel[2],
+                   self.pos[0], self.pos[1], self.pos[2],
+                   self.rpy[0], self.rpy[1], self.rpy[2])
         self.mutex.unlock()
         return snapshot
 
@@ -85,7 +95,7 @@ class DataProcessingWorker(QThread):
 
             pitch, roll, yaw, px, py, pz = self.sensor_fusion.update(new_data[0:6], dt)
             
-            self.shared_state.update((px, py, pz, roll, pitch, yaw))
+            self.shared_state.update(new_data[0:6], (px, py, pz), (roll, pitch, yaw))
         except Exception as e:
             print(f"WORKER CRASHED: {e}")
             self.stop()
