@@ -1,4 +1,5 @@
 from collections import deque
+from typing import Optional
 import serial
 import numpy as np
 
@@ -16,7 +17,7 @@ class SensorManager:
         self.sim_t = 0
         self.buffer = ""
         # miss statistic: it's a queue of 1 second of data, where each miss is represented as a 1 and each hit as a 0. So the sum of the queue gives the number of misses in the last second, and the length of the queue gives the total number of samples in the last second.
-        self.misses = deque(maxlen=1000 // AppConstants.UPDATE_INTERVAL_MS)
+        self.misses = deque(maxlen=1000 // AppConstants.PHYSICS_UPDATE_INTERVAL)
 
         if not self.simulation_mode:
             try:
@@ -27,7 +28,7 @@ class SensorManager:
                 print("Switching to SIMULATION_MODE")
                 self.simulation_mode = True
 
-    def get_next_sample(self):
+    def get_next_sample(self) -> Optional[np.ndarray]:
         """
         Returns a numpy array of 9 floats in SI units:
         [ax (m/s^2), ay (m/s^2), az (m/s^2),
@@ -58,6 +59,7 @@ class SensorManager:
             new_data[0:3] *= self.MG_TO_MS2
             new_data[3:6] *= self.MDPS_TO_DPS
 
+            self.misses.append(0)
             return new_data
 
         else:
@@ -73,17 +75,14 @@ class SensorManager:
                     parts = line.split(',')
 
                     if len(parts) == 6:
-                        raw_data = [float(x) for x in parts]
+                        raw_data = np.array([float(x) for x in parts])
                         si_data = np.zeros(9)
-
-                        si_data[0] = raw_data[0] * self.MG_TO_MS2
-                        si_data[1] = raw_data[1] * self.MG_TO_MS2
-                        si_data[2] = raw_data[2] * self.MG_TO_MS2
-
-                        si_data[3] = raw_data[3] * self.MDPS_TO_DPS
-                        si_data[4] = raw_data[4] * self.MDPS_TO_DPS
-                        si_data[5] = raw_data[5] * self.MDPS_TO_DPS
-
+                        si_data[0:3] = raw_data[0:3] * self.MG_TO_MS2 + np.array(
+                            AppConstants.ACC_BIAS
+                        )
+                        si_data[3:6] = raw_data[3:6] * self.MDPS_TO_DPS + np.array(
+                            AppConstants.GYRO_BIAS
+                        )
                         self.misses.append(0)
                         return si_data
                     else:

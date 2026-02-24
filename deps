@@ -1,1 +1,1 @@
-pip install pyqtgraph PyQt5 pyserial
+pip install pyqtgraph PyQt5 PyOpenGL pyserial scipy ipykernel
