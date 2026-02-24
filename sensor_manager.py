@@ -77,8 +77,12 @@ class SensorManager:
                     if len(parts) == 6:
                         raw_data = np.array([float(x) for x in parts])
                         si_data = np.zeros(9)
-                        si_data[0:3] = raw_data[0:3] * self.MG_TO_MS2
-                        si_data[3:6] = raw_data[3:6] * self.MDPS_TO_DPS
+                        si_data[0:3] = raw_data[0:3] * self.MG_TO_MS2 + np.array(
+                            AppConstants.ACC_BIAS
+                        )
+                        si_data[3:6] = raw_data[3:6] * self.MDPS_TO_DPS + np.array(
+                            AppConstants.GYRO_BIAS
+                        )
                         self.misses.append(0)
                         return si_data
                     else:

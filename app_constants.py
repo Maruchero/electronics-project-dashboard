@@ -9,10 +9,18 @@ class AppConstants:
 
     ## Performance ##
     DASHBOARD_UPDATE_INTERVAL = 50  # Update interval in milliseconds (30 Hz)
-    PHYSICS_UPDATE_INTERVAL = 50  # Physics update interval in milliseconds (100 Hz)
+    PHYSICS_UPDATE_INTERVAL = 10  # Physics update interval in milliseconds (100 Hz)
 
     ## Sensor fusion ##
     DAMPING_FACTOR = 0.95  # Slows down velocity over time to prevent drift
     ACCELERATION_DEADZONE = 1.5  # Deadzone for linear accelerations
-    ROTATION_DEADZONE = 0.05  # Deadzone for rotation rate
+    ROTATION_DEADZONE = 2  # Deadzone for rotation speed
+    ACC_BIAS = [0, 0.05, -0.4]  # Bias correction for ax,ay,az (tuned experimentally)
+    GYRO_BIAS = [0, 0, 0]  # Bias correction for gx,gy,gz (tuned experimentally)
     G = 9.81  # Gravity constant in mm/s²
+
+# BIAS
+# z = 10.28
+# z = -9.47
+# x = 9.87
+# y = 9.72
