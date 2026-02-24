@@ -27,12 +27,13 @@ class SensorFusion:
         if len(data) < 6:
             raise ValueError("Data array must contain at least 6 elements: [ax, ay, az, gx, gy, gz]")
         
-        rpy = data[3:6] * dt
+        rpy = data[3:6]
         for i in range(3):
             if abs(rpy[i]) < AppConstants.ROTATION_DEADZONE:
                 rpy[i] = 0.0
-        rotation = R.from_euler("XYZ", rpy, degrees=True)
+        self.rpy += rpy * dt
         
+        rotation = R.from_euler("XYZ", self.rpy, degrees=True)
         acc_world = rotation.apply(data[0:3])
         acc_world[2] -= AppConstants.G
         for i in range(3):
@@ -40,10 +41,7 @@ class SensorFusion:
                 acc_world[i] = 0.0
         
         self.vel = acc_world * dt + self.vel * AppConstants.DAMPING_FACTOR
-
         self.pos = self.vel * dt + self.pos
-        
-        self.rpy = self.rpy + rotation.as_euler("XYZ", degrees=True)
         return self.rpy[1], self.rpy[0], self.rpy[2], self.pos[0], self.pos[1], self.pos[2]
 
     def reset(self):
